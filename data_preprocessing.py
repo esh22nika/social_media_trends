@@ -51,9 +51,11 @@ class DataPreprocessor:
     
     def extract_hashtags(self, text):
         """Extract hashtags from text"""
-        if pd.isna(text):
+        if pd.isna(text) or text == '':
             return []
-        return re.findall(r'#(\w+)', str(text))
+        
+        hashtags = re.findall(r'#(\w+)', str(text))
+        return list(set(hashtags))  # Remove duplicates
     
     def extract_mentions(self, text):
         """Extract mentions from text"""
@@ -76,149 +78,254 @@ class DataPreprocessor:
                    row.get('reply_count', 0) * 2)
         return 0
     
-    def extract_keywords(self, text, top_n=5):
-        """Extract top keywords from text safely"""
-        try:
-            if not text or pd.isna(text):
-                return []
-            
-            # Tokenize safely
-            tokens = word_tokenize(str(text).lower())
-            
-            # Remove stopwords and short words
-            keywords = [w for w in tokens if w not in self.stop_words and len(w) > 3 and w.isalpha()]
-            
-            if not keywords:
-                return []
-            
-            # Get frequency safely
-            freq = pd.Series(keywords).value_counts()
-            return freq.head(top_n).index.tolist()
-        
-        except Exception as e:
-            print(f"[Keyword Extraction Error] {e}")
+    def extract_keywords(self, text, max_keywords=10):
+        """Extract keywords from text"""
+        if pd.isna(text) or text == '':
             return []
+        
+        # Simple keyword extraction: get words that are longer and appear to be meaningful
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', str(text).lower())
+        
+        # Remove common stop words
+        stop_words = {'that', 'this', 'with', 'from', 'have', 'will', 'your', 'more', 
+                     'about', 'been', 'their', 'what', 'when', 'where', 'which', 'would'}
+        
+        keywords = [w for w in words if w not in stop_words]
+        
+        # Return most common ones
+        from collections import Counter
+        counter = Counter(keywords)
+        return [word for word, _ in counter.most_common(max_keywords)]
 
     
     def analyze_sentiment(self, text):
-        """Analyze sentiment safely using TextBlob"""
-        if not text or pd.isna(text):
-            return 'neutral', 0.0
-
+        """Analyze sentiment of text"""
+        if pd.isna(text) or text == '':
+            return 'neutral'
+        
         try:
-            analysis = TextBlob(str(text))
-            polarity = float(analysis.sentiment.polarity)
+            blob = TextBlob(str(text))
+            polarity = blob.sentiment.polarity
+            
             if polarity > 0.1:
-                sentiment = 'positive'
+                return 'positive'
             elif polarity < -0.1:
-                sentiment = 'negative'
+                return 'negative'
             else:
-                sentiment = 'neutral'
-            return sentiment, polarity
-        except Exception as e:
-            print(f"[Sentiment Error] {e}")
-            return 'neutral', 0.0
+                return 'neutral'
+        except:
+            return 'neutral'
 
     
-    def preprocess_reddit_data(self, df):
-        """Preprocess Reddit data"""
+    def preprocess_reddit(self, df):
+        """Preprocess Reddit data to unified format"""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
         print("Preprocessing Reddit data...")
         
-        # Combine title and selftext
-        df['full_text'] = df['title'].fillna('') + ' ' + df['selftext'].fillna('')
+        # Create unified format
+        unified = pd.DataFrame()
         
-        # Clean text
-        df['cleaned_text'] = df['full_text'].apply(self.clean_text)
+        # Map Reddit columns to unified format
+        unified['id'] = df['post_id'].astype(str)
+        unified['title'] = df['title'].fillna('')
+        unified['text'] = df['selftext'].fillna('')
+        unified['author'] = df['author'].fillna('unknown')
         
-        # Extract hashtags (from URLs and text)
-        df['hashtags'] = df['full_text'].apply(self.extract_hashtags)
+        # Fix datetime column - Reddit uses 'created_utc_x'
+        unified['created_at'] = pd.to_datetime(df['created_utc_x'], errors='coerce')
         
-        # Calculate engagement
-        df['engagement_score'] = df.apply(lambda x: self.calculate_engagement(x, 'reddit'), axis=1)
+        # Engagement metrics
+        unified['score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
+        unified['num_comments'] = pd.to_numeric(df['num_comments'], errors='coerce').fillna(0)
+        unified['engagement_score'] = unified['score'] + (unified['num_comments'] * 2)
         
-        # Extract keywords
-        df['keywords'] = df['cleaned_text'].apply(lambda x: self.extract_keywords(x, 5))
+        # Platform identifier
+        unified['platform'] = 'reddit'
+        unified['url'] = 'https://reddit.com' + df['permalink'].fillna('')
+        
+        # Extract keywords from title and text
+        unified['keywords'] = unified.apply(
+            lambda row: self.extract_keywords(row['title'] + ' ' + row['text']), 
+            axis=1
+        )
+        
+        # Reddit doesn't have hashtags, so extract from text if any
+        unified['hashtags'] = unified['text'].apply(self.extract_hashtags)
         
         # Sentiment analysis
-        sentiments = df['cleaned_text'].apply(self.analyze_sentiment)
-        df['sentiment'] = sentiments.apply(lambda x: x[0])
-        df['sentiment_score'] = sentiments.apply(lambda x: x[1])
+        unified['sentiment'] = unified['text'].apply(self.analyze_sentiment)
         
-        # Convert timestamps
-        if 'created_utc' in df.columns:
-            df['created_utc'] = pd.to_datetime(df['created_utc'])
+        # Normalize engagement (0-100 scale)
+        if unified['engagement_score'].max() > 0:
+            unified['normalized_engagement'] = (
+                (unified['engagement_score'] / unified['engagement_score'].max()) * 100
+            )
+        else:
+            unified['normalized_engagement'] = 0
         
-        # Normalize data
-        df['normalized_engagement'] = self.normalize_scores(df['engagement_score'])
+        # Trend status based on engagement
+        unified['trend_status'] = unified['normalized_engagement'].apply(
+            lambda x: 'rising' if x > 70 else ('stable' if x > 40 else 'falling')
+        )
         
-        return df
+        print(f"  Processed {len(unified)} Reddit posts")
+        return unified
+
+    # Backwards-compatible wrapper
+    def preprocess_reddit_data(self, df):
+        """Backward compatible wrapper for older callers that expect preprocess_reddit_data."""
+        return self.preprocess_reddit(df)
     
-    def preprocess_youtube_data(self, df):
-        """Preprocess YouTube data"""
+    def preprocess_youtube(self, df):
+        """Preprocess YouTube data to unified format"""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
         print("Preprocessing YouTube data...")
         
-        # Combine title and description
-        df['full_text'] = df['title'].fillna('') + ' ' + df['description'].fillna('')
+        unified = pd.DataFrame()
         
-        # Clean text
-        df['cleaned_text'] = df['full_text'].apply(self.clean_text)
+        # Map YouTube columns
+        unified['id'] = df['video_id'].astype(str)
+        unified['title'] = df['title'].fillna('')
+        unified['text'] = df['description'].fillna('')
+        unified['author'] = df['channel_title'].fillna('unknown')
         
-        # Parse tags
-        if 'tags' in df.columns:
-            df['tags'] = df['tags'].apply(lambda x: eval(x) if isinstance(x, str) and x.startswith('[') else [])
+        # Fix datetime column - YouTube uses 'published_at'
+        unified['created_at'] = pd.to_datetime(df['published_at'], errors='coerce')
         
-        # Calculate engagement
-        df['engagement_score'] = df.apply(lambda x: self.calculate_engagement(x, 'youtube'), axis=1)
+        # Engagement metrics
+        unified['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0)
+        unified['comment_count'] = pd.to_numeric(df['comment_count'], errors='coerce').fillna(0)
+        unified['view_count'] = pd.to_numeric(df['view_count'], errors='coerce').fillna(0)
         
-        # Extract keywords
-        df['keywords'] = df['cleaned_text'].apply(lambda x: self.extract_keywords(x, 5))
+        # Calculate engagement score
+        unified['engagement_score'] = (
+            unified['like_count'] + 
+            (unified['comment_count'] * 3) + 
+            (unified['view_count'] * 0.01)
+        )
         
-        # Sentiment analysis
-        sentiments = df['cleaned_text'].apply(self.analyze_sentiment)
-        df['sentiment'] = sentiments.apply(lambda x: x[0])
-        df['sentiment_score'] = sentiments.apply(lambda x: x[1])
+        # Platform
+        unified['platform'] = 'youtube'
+        unified['url'] = 'https://youtube.com/watch?v=' + df['video_id'].fillna('')
         
-        # Convert timestamps
-        if 'published_at' in df.columns:
-            df['published_at'] = pd.to_datetime(df['published_at'])
+        # Parse tags (they're stored as string representation of list)
+        def parse_tags(tags_str):
+            if pd.isna(tags_str) or tags_str == '':
+                return []
+            try:
+                if isinstance(tags_str, str):
+                    # Remove brackets and quotes, split by comma
+                    tags_str = tags_str.strip("[]'\"")
+                    return [t.strip().strip("'\"") for t in tags_str.split(',') if t.strip()]
+                return []
+            except:
+                return []
         
-        # Normalize data
-        df['normalized_engagement'] = self.normalize_scores(df['engagement_score'])
+        unified['keywords'] = df['tags'].apply(parse_tags)
         
-        return df
+        # YouTube doesn't typically have hashtags in API, extract from description
+        unified['hashtags'] = unified['text'].apply(self.extract_hashtags)
+        
+        # Sentiment
+        unified['sentiment'] = unified['text'].apply(self.analyze_sentiment)
+        
+        # Normalize engagement
+        if unified['engagement_score'].max() > 0:
+            unified['normalized_engagement'] = (
+                (unified['engagement_score'] / unified['engagement_score'].max()) * 100
+            )
+        else:
+            unified['normalized_engagement'] = 0
+        
+        unified['trend_status'] = unified['normalized_engagement'].apply(
+            lambda x: 'rising' if x > 70 else ('stable' if x > 40 else 'falling')
+        )
+        
+        print(f"  Processed {len(unified)} YouTube videos")
+        return unified
+
+    # Backwards-compatible wrapper
+    def preprocess_youtube_data(self, df):
+        """Backward compatible wrapper for older callers that expect preprocess_youtube_data."""
+        return self.preprocess_youtube(df)
     
-    def preprocess_bluesky_data(self, df):
-        """Preprocess Bluesky data"""
+    def preprocess_bluesky(self, df):
+        """Preprocess Bluesky data to unified format"""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
         print("Preprocessing Bluesky data...")
         
-        # Clean text
-        df['cleaned_text'] = df['text'].fillna('').apply(self.clean_text)
+        unified = pd.DataFrame()
         
-        # Parse hashtags if stored as JSON string
-        if 'hashtags' in df.columns:
-            df['hashtags'] = df['hashtags'].apply(
-                lambda x: json.loads(x) if isinstance(x, str) and x.startswith('[') else []
+        # Map Bluesky columns
+        unified['id'] = df['uri'].astype(str)
+        unified['title'] = df['text'].fillna('').str[:100]  # Use first 100 chars of text as title
+        unified['text'] = df['text'].fillna('')
+        unified['author'] = df['author_handle'].fillna('unknown')
+        
+        # Fix datetime - Bluesky has created_at but might have NaN values
+        unified['created_at'] = pd.to_datetime(df['created_at'], errors='coerce')
+        # Fill NaN dates with a default recent date
+        unified['created_at'] = unified['created_at'].fillna(pd.Timestamp.now())
+        
+        # Engagement metrics
+        unified['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0)
+        unified['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0)
+        unified['repost_count'] = pd.to_numeric(df['repost_count'], errors='coerce').fillna(0)
+        
+        unified['engagement_score'] = (
+            unified['like_count'] + 
+            (unified['reply_count'] * 2) + 
+            (unified['repost_count'] * 1.5)
+        )
+        
+        # Platform
+        unified['platform'] = 'bluesky'
+        unified['url'] = df['uri'].fillna('')
+        
+        # Parse hashtags (stored as string representation of list)
+        def parse_list_str(list_str):
+            if pd.isna(list_str) or list_str == '' or list_str == '[]':
+                return []
+            try:
+                if isinstance(list_str, str):
+                    return eval(list_str)
+                return []
+            except:
+                return []
+        
+        unified['hashtags'] = df['hashtags'].apply(parse_list_str)
+        
+        # Extract keywords from text
+        unified['keywords'] = unified['text'].apply(self.extract_keywords)
+        
+        # Sentiment
+        unified['sentiment'] = unified['text'].apply(self.analyze_sentiment)
+        
+        # Normalize engagement
+        if unified['engagement_score'].max() > 0:
+            unified['normalized_engagement'] = (
+                (unified['engagement_score'] / unified['engagement_score'].max()) * 100
             )
+        else:
+            unified['normalized_engagement'] = 0
         
-        # Calculate engagement
-        df['engagement_score'] = df.apply(lambda x: self.calculate_engagement(x, 'bluesky'), axis=1)
+        unified['trend_status'] = unified['normalized_engagement'].apply(
+            lambda x: 'rising' if x > 70 else ('stable' if x > 40 else 'falling')
+        )
         
-        # Extract keywords
-        df['keywords'] = df['cleaned_text'].apply(lambda x: self.extract_keywords(x, 5))
-        
-        # Sentiment analysis
-        sentiments = df['cleaned_text'].apply(self.analyze_sentiment)
-        df['sentiment'] = sentiments.apply(lambda x: x[0])
-        df['sentiment_score'] = sentiments.apply(lambda x: x[1])
-        
-        # Convert timestamps
-        if 'created_at' in df.columns:
-            df['created_at'] = pd.to_datetime(df['created_at'])
-        
-        # Normalize data
-        df['normalized_engagement'] = self.normalize_scores(df['engagement_score'])
-        
-        return df
+        print(f"  Processed {len(unified)} Bluesky posts")
+        return unified
+
+    # Backwards-compatible wrapper
+    def preprocess_bluesky_data(self, df):
+        """Backward compatible wrapper for older callers that expect preprocess_bluesky_data."""
+        return self.preprocess_bluesky(df)
     
     def normalize_scores(self, series):
         """Normalize scores to 0-100 range"""

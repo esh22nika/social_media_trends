@@ -243,99 +243,181 @@ def get_overview():
     """Overview metrics for landing/overview page."""
     try:
         if df_unified is None or df_unified.empty:
-            return jsonify({'success': True, 'data': {}})
+            print("WARNING: df_unified is empty!")
+            return jsonify({
+                'success': False,
+                'error': 'No data loaded'
+            }), 500
+
+        print(f"Processing overview for {len(df_unified)} records")
+        print(f"Columns available: {df_unified.columns.tolist()}")
 
         # Top 3 trends per platform by engagement_score
         top_by_platform = {}
+        
+        if 'platform' not in df_unified.columns:
+            print("ERROR: 'platform' column not found!")
+            return jsonify({'success': False, 'error': 'platform column missing'}), 500
+        
         for platform in df_unified['platform'].dropna().unique():
-            platform_df = df_unified[df_unified['platform'] == platform].copy()
-            platform_df = platform_df.sort_values('engagement_score', ascending=False).head(3)
-            platform_items = []
-            for _, row in platform_df.iterrows():
-                platform_items.append({
-                    'name': (row.get('title') or '')[:80],
-                    'engagementPct': int(min(max(row.get('normalized_engagement', 50), 0), 100)),
-                    'growthRate': random.randint(5, 60),
-                    'url': row.get('url', '')
-                })
-            top_by_platform[platform] = platform_items
+            try:
+                platform_df = df_unified[df_unified['platform'] == platform].copy()
+                
+                # Sort by engagement_score if it exists, otherwise use a default
+                if 'engagement_score' in platform_df.columns:
+                    platform_df = platform_df.sort_values('engagement_score', ascending=False).head(3)
+                else:
+                    platform_df = platform_df.head(3)
+                
+                platform_items = []
+                for _, row in platform_df.iterrows():
+                    # Safely get values with defaults
+                    title = str(row.get('title', 'Untitled'))[:80]
+                    engagement_pct = int(row.get('normalized_engagement', 50))
+                    engagement_pct = max(0, min(100, engagement_pct))  # Clamp 0-100
+                    
+                    platform_items.append({
+                        'name': title,
+                        'engagementPct': engagement_pct,
+                        'growthRate': random.randint(5, 60),
+                        'url': str(row.get('url', ''))
+                    })
+                
+                top_by_platform[platform] = platform_items
+                print(f"  ✓ Processed {len(platform_items)} items for {platform}")
+                
+            except Exception as e:
+                print(f"  ✗ Error processing platform {platform}: {e}")
+                continue
 
         # Global trend rise: compare last 7 days vs previous 7 days
-        df_temp = df_unified.copy()
-        df_temp['date'] = pd.to_datetime(df_temp['created_at']).dt.date
-        max_date = df_temp['date'].max()
-        if pd.isna(max_date):
-            global_rise_pct = 0
-        else:
-            current_start = max_date - timedelta(days=6)
-            prev_start = current_start - timedelta(days=7)
-            prev_end = current_start - timedelta(days=1)
-            curr_sum = df_temp[(df_temp['date'] >= current_start) & (df_temp['date'] <= max_date)]['engagement_score'].sum()
-            prev_sum = df_temp[(df_temp['date'] >= prev_start) & (df_temp['date'] <= prev_end)]['engagement_score'].sum()
-            if prev_sum > 0:
-                global_rise_pct = int(((curr_sum - prev_sum) / prev_sum) * 100)
-            else:
-                global_rise_pct = 0
+        global_rise_pct = 0
+        try:
+            if 'created_at' in df_unified.columns:
+                df_temp = df_unified.copy()
+                df_temp['date'] = pd.to_datetime(df_temp['created_at'], errors='coerce').dt.date
+                df_temp = df_temp.dropna(subset=['date'])
+                
+                if not df_temp.empty:
+                    max_date = df_temp['date'].max()
+                    current_start = max_date - timedelta(days=6)
+                    prev_start = current_start - timedelta(days=7)
+                    prev_end = current_start - timedelta(days=1)
+                    
+                    curr_df = df_temp[(df_temp['date'] >= current_start) & (df_temp['date'] <= max_date)]
+                    prev_df = df_temp[(df_temp['date'] >= prev_start) & (df_temp['date'] <= prev_end)]
+                    
+                    if 'engagement_score' in df_temp.columns:
+                        curr_sum = curr_df['engagement_score'].sum()
+                        prev_sum = prev_df['engagement_score'].sum()
+                        
+                        if prev_sum > 0:
+                            global_rise_pct = int(((curr_sum - prev_sum) / prev_sum) * 100)
+                    
+                    print(f"  ✓ Global rise: {global_rise_pct}%")
+        except Exception as e:
+            print(f"  ✗ Error calculating global rise: {e}")
 
-        # Most connected topics from frequent itemsets (size>=2)
+        # Most connected topics from frequent itemsets
         connected_pairs = []
-        if frequent_itemsets:
-            for items, support in frequent_itemsets.items():
-                if len(items) == 2:
-                    a, b = list(items)
-                    connected_pairs.append({'a': a, 'b': b, 'strength': float(support)})
-        connected_pairs = sorted(connected_pairs, key=lambda x: x['strength'], reverse=True)[:10]
+        try:
+            if frequent_itemsets:
+                for items, support in frequent_itemsets.items():
+                    if len(items) == 2:
+                        a, b = list(items)
+                        connected_pairs.append({
+                            'a': str(a), 
+                            'b': str(b), 
+                            'strength': float(support)
+                        })
+                connected_pairs = sorted(connected_pairs, key=lambda x: x['strength'], reverse=True)[:10]
+                print(f"  ✓ Found {len(connected_pairs)} connected pairs")
+        except Exception as e:
+            print(f"  ✗ Error processing connected pairs: {e}")
 
-        # Emerging pattern = highest lift association (mock if none)
+        # Emerging pattern = highest lift association
         emerging = None
-        if association_rules:
-            top_rule = sorted(association_rules, key=lambda r: r.get('lift', 0), reverse=True)[0]
-            emerging = {
-                'antecedent': top_rule.get('antecedent'),
-                'consequent': top_rule.get('consequent'),
-                'lift': float(top_rule.get('lift', 0)),
-                'support': float(top_rule.get('support', 0)),
-            }
+        try:
+            if association_rules and len(association_rules) > 0:
+                top_rule = sorted(association_rules, key=lambda r: r.get('lift', 0), reverse=True)[0]
+                emerging = {
+                    'antecedent': ', '.join(top_rule.get('antecedent', [])),
+                    'consequent': ', '.join(top_rule.get('consequent', [])),
+                    'lift': float(top_rule.get('lift', 0)),
+                    'support': float(top_rule.get('support', 0)),
+                }
+                print(f"  ✓ Emerging pattern: {emerging['antecedent']} → {emerging['consequent']}")
+        except Exception as e:
+            print(f"  ✗ Error processing emerging pattern: {e}")
 
-        # Mini network preview (top 10 nodes by frequency across keywords/hashtags)
-        keyword_counts = {}
-        def count_terms(terms):
-            if isinstance(terms, list):
-                for t in terms:
-                    keyword_counts[t] = keyword_counts.get(t, 0) + 1
-        df_unified['keywords'].apply(count_terms)
-        df_unified['hashtags'].apply(count_terms)
-        top_nodes = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        nodes = [{'id': k, 'size': v} for k, v in top_nodes]
+        # Mini network preview
+        nodes = []
         edges = []
-        # build simple co-occurrence within posts for preview
-        for _, row in df_unified.iterrows():
-            terms = []
-            if isinstance(row.get('keywords'), list):
-                terms.extend(row.get('keywords'))
-            if isinstance(row.get('hashtags'), list):
-                terms.extend(row.get('hashtags'))
-            terms = [t for t in terms if t in dict(top_nodes)]
-            for i in range(len(terms)):
-                for j in range(i+1, len(terms)):
-                    a, b = sorted([terms[i], terms[j]])
-                    edges.append((a, b))
-        edge_weights = {}
-        for a, b in edges:
-            key = (a, b)
-            edge_weights[key] = edge_weights.get(key, 0) + 1
-        preview_edges = [{'source': a, 'target': b, 'weight': w} for (a, b), w in edge_weights.items()]
-        preview_edges = sorted(preview_edges, key=lambda e: e['weight'], reverse=True)[:20]
+        try:
+            keyword_counts = {}
+            
+            def count_terms(terms):
+                if isinstance(terms, list):
+                    for t in terms:
+                        if t and isinstance(t, str):
+                            keyword_counts[t] = keyword_counts.get(t, 0) + 1
+            
+            if 'keywords' in df_unified.columns:
+                df_unified['keywords'].apply(count_terms)
+            if 'hashtags' in df_unified.columns:
+                df_unified['hashtags'].apply(count_terms)
+            
+            top_nodes = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            nodes = [{'id': str(k), 'size': int(v)} for k, v in top_nodes]
+            
+            # Build co-occurrence edges
+            node_set = {k for k, _ in top_nodes}
+            edge_weights = {}
+            
+            for _, row in df_unified.iterrows():
+                terms = []
+                if isinstance(row.get('keywords'), list):
+                    terms.extend([t for t in row.get('keywords', []) if t in node_set])
+                if isinstance(row.get('hashtags'), list):
+                    terms.extend([t for t in row.get('hashtags', []) if t in node_set])
+                
+                for i in range(len(terms)):
+                    for j in range(i+1, len(terms)):
+                        a, b = sorted([terms[i], terms[j]])
+                        key = (a, b)
+                        edge_weights[key] = edge_weights.get(key, 0) + 1
+            
+            edges = [{'source': str(a), 'target': str(b), 'weight': int(w)} 
+                    for (a, b), w in edge_weights.items()]
+            edges = sorted(edges, key=lambda e: e['weight'], reverse=True)[:20]
+            
+            print(f"  ✓ Network: {len(nodes)} nodes, {len(edges)} edges")
+            
+        except Exception as e:
+            print(f"  ✗ Error building network: {e}")
 
-        return jsonify({'success': True, 'data': {
-            'topByPlatform': top_by_platform,
-            'globalRisePct': global_rise_pct,
-            'mostConnectedPairs': connected_pairs,
-            'emergingPattern': emerging,
-            'networkPreview': {'nodes': nodes, 'edges': preview_edges}
-        }})
+        result = {
+            'success': True,
+            'data': {
+                'topByPlatform': top_by_platform,
+                'globalRisePct': global_rise_pct,
+                'mostConnectedPairs': connected_pairs,
+                'emergingPattern': emerging,
+                'networkPreview': {'nodes': nodes, 'edges': edges}
+            }
+        }
+        
+        print("✓ Overview endpoint completed successfully")
+        return jsonify(result)
+        
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"ERROR in /api/overview: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
