@@ -61,4 +61,41 @@ tbody tr:hover{background:#0e1523}
 /* inputs */
 .tm-input{background:#0e1523;border:1px solid #1f2937;border-radius:10px;color:var(--text);padding:10px 12px;width:100%}
 
+/* Additions for New Components */
+.kpi-card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:16px}
+.kpi-card h3{margin:0 0 8px 0;font-size:14px;color:var(--muted);font-weight:500;}
+.kpi-card .value{font-size:28px;font-weight:700;color:var(--text);}
+.kpi-card .delta{font-size:12px;margin-left:8px;}
+.delta.positive{color:var(--ok);}
+.delta.negative{color:var(--bad);}
+
+.tm-tabs{display:flex;gap:8px;border-bottom:1px solid #1f2937;margin-bottom:16px;}
+.tm-tabs button{background:none;border:none;color:var(--muted);padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;}
+.tm-tabs button.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+.trend-card{background:var(--card);border-radius:12px;padding:16px;border:1px solid #1f2937;margin-bottom:12px;}
+.trend-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.trend-card-platform{font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;}
+.trend-card-title{font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text);}
+.trend-card-relevance{width:100%;background:#2c3e50;border-radius:4px;height:8px;overflow:hidden;margin:8px 0;}
+.relevance-bar{height:100%;background:linear-gradient(90deg, var(--accent), var(--accent-2));}
+.trend-card-metrics{display:flex;gap:16px;font-size:12px;color:var(--muted);margin:12px 0;}
+.trend-card-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.trend-card-sentiment{font-size:12px;font-weight:500;margin-top:8px;}
+
+.interest-item{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:14px;}
+.interest-bar-bg{height:6px;background:#1f2937;border-radius:3px;flex-grow:1;margin:0 10px;}
+.interest-bar-fill{height:100%;background:var(--accent);border-radius:3px;}
+
+.rule-card{background: #161d2c; padding: 16px; border-radius: 12px; margin-bottom:12px;}
+.rule-flow{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
+.rule-flow .tm-chip{background:var(--card); border-color:#3b3b5e;}
+.rule-metrics{display:flex; justify-content:space-around; text-align:center; font-size:14px;}
+.rule-metrics div span{display:block; font-size:12px; color:var(--muted);}
+.rule-metrics div strong{font-size:16px; color:var(--text);}
+
+.tm-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+
+.tm-nav a.active { background:#161d2c; color:var(--text); }
+
 

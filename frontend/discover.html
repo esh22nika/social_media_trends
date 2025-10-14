@@ -3,12 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Discover • TrendMiner</title>
+  <title>Topic Explorer • TrendMiner</title>
   <link rel="stylesheet" href="/css/global.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <header class="tm-header">
@@ -17,53 +14,41 @@
       <span>TrendMiner</span>
     </div>
     <nav class="tm-nav">
-      <a href="/overview.html">Overview</a>
-      <a href="/discover.html">Discover</a>
-      <a href="/network.html">Network</a>
-      <a href="/timeline.html">Timeline</a>
-      <a href="/insights.html">Insights</a>
+      <a href="/overview.html">Dashboard</a>
+      <a href="/discover.html" class="active">Topic Explorer</a>
+      <a href="/pattern-mining.html">Pattern Mining</a>
+      <a href="/timeline.html">Trend Analysis</a>
     </nav>
   </header>
 
-  <main style="padding:20px;max-width:1200px;margin:0 auto;">
-    <section class="tm-card">
-      <h3>Search a hashtag or topic</h3>
+  <main style="padding:20px;max-width:1400px;margin:0 auto;">
+    <h2>Topic Explorer</h2>
+    <p class="mb-16" style="color:var(--muted)">Drill down into specific trends and discover detailed insights</p>
+
+    <div class="tm-card mb-24">
       <div class="tm-row gap-12">
-        <input id="q" class="tm-input" placeholder="#ai, climate, etc." />
-        <button class="tm-button" onclick="search()">Analyze</button>
+        <input id="search-input" class="tm-input" placeholder="Search topics, hashtags, or keywords..."/>
+        <button class="tm-button" id="search-btn">Search</button>
       </div>
-    </section>
-
-    <div class="tm-grid cols-2 mt-24">
-      <section class="tm-card">
-        <h3>Frequency Over Time</h3>
-        <canvas id="freqChart" class="chart-lg"></canvas>
-      </section>
-      <section class="tm-card">
-        <h3>Sentiment</h3>
-        <canvas id="sentChart" class="chart"></canvas>
-      </section>
+    </div>
+    
+    <div class="tm-grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+      <div id="feed-container">
+        </div>
+      <div>
+        <div class="tm-card mb-24">
+            <h3>Related Topics</h3>
+            <div id="related-topics"></div>
+        </div>
+        <div class="tm-card">
+            <h3>Top Contributors</h3>
+            <div id="top-contributors"></div>
+        </div>
+      </div>
     </div>
 
-    <div class="tm-grid cols-2 mt-24">
-      <section class="tm-card">
-        <h3>Related Hashtags</h3>
-        <div id="related" class="tm-row wrap gap-8"></div>
-      </section>
-      <section class="tm-card">
-        <h3>Sample Top Posts</h3>
-        <table>
-          <thead><tr><th>Platform</th><th>Title</th><th>Engagement</th></tr></thead>
-          <tbody id="samples"></tbody>
-        </table>
-      </section>
-    </div>
   </main>
-
-  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
   <script src="/js/discover.js"></script>
-  <script>document.getElementById('tm-year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
-
 

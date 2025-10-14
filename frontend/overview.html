@@ -3,12 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Overview • TrendMiner</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Dashboard • TrendMiner</title>
   <link rel="stylesheet" href="/css/global.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <header class="tm-header">
@@ -17,43 +14,62 @@
       <span>TrendMiner</span>
     </div>
     <nav class="tm-nav">
-      <a href="/overview.html">Overview</a>
-      <a href="/discover.html">Discover</a>
-      <a href="/network.html">Network</a>
-      <a href="/timeline.html">Timeline</a>
-      <a href="/insights.html">Insights</a>
+      <a href="/overview.html" class="active">Dashboard</a>
+      <a href="/discover.html">Topic Explorer</a>
+      <a href="/pattern-mining.html">Pattern Mining</a>
+      <a href="/timeline.html">Trend Analysis</a>
     </nav>
   </header>
 
-  <main style="padding:20px;max-width:1200px;margin:0 auto;">
-    <div class="tm-grid cols-3">
-      <section class="tm-card">
-        <h3>Global Trend Rise</h3>
-        <div class="tm-kpi"><span class="k" id="kpi-rise">0%</span><span class="s">vs last week</span></div>
-      </section>
-      <section class="tm-card">
-        <h3>Platform Comparison</h3>
-        <canvas id="spark" class="chart"></canvas>
-      </section>
-      <section class="tm-card">
-        <h3>Emerging Pattern</h3>
-        <div id="emerging">Loading…</div>
-      </section>
+  <main style="padding:20px;max-width:1400px;margin:0 auto;">
+    <h2>Your Personalized Dashboard</h2>
+    <p class="mb-16" style="color:var(--muted)">Discover trends tailored to your interests</p>
+
+    <div class="tm-grid cols-4 mb-24">
+      <div class="kpi-card">
+        <h3>Trends Tracked</h3>
+        <span class="value" id="kpi-tracked">0</span>
+      </div>
+      <div class="kpi-card">
+        <h3>Active Topics</h3>
+        <span class="value" id="kpi-topics">0</span>
+      </div>
+      <div class="kpi-card">
+        <h3>Updates Today</h3>
+        <span class="value" id="kpi-today">0</span>
+      </div>
+      <div class="kpi-card">
+        <h3>Relevance Score</h3>
+        <span class="value" id="kpi-relevance">0%</span>
+      </div>
     </div>
 
-    <div class="tm-grid cols-3 mt-24" id="top-platforms"></div>
+    <div class="tm-grid" style="grid-template-columns: 2fr 1fr; gap: 24px;">
+      <div>
+        <div class="tm-tabs">
+          <button id="tab-foryou" class="active">For You</button>
+          <button id="tab-trending">Trending</button>
+        </div>
+        <div id="trends-list"></div>
+      </div>
+      <div>
+        <div class="tm-card mb-24">
+          <h3>Your Interests</h3>
+          <div id="interests-list"></div>
+          <button class="tm-button mt-16" style="width:100%">Manage Interests</button>
+        </div>
+        <div class="tm-card">
+          <h3>Quick Actions</h3>
+          <p style="color:var(--muted); font-size:14px;">Discover new topics or analyze patterns.</p>
+          <div class="flex gap-12 mt-16">
+             <button class="tm-button" onclick="window.location.href='/discover.html'" style="flex:1;">Discover</button>
+             <button class="tm-button" onclick="window.location.href='/pattern-mining.html'" style="flex:1; background: var(--card); border: 1px solid var(--accent);">Analyze</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <section class="tm-card mt-24">
-      <h3>Most Connected Topics (Preview)</h3>
-      <div id="mini-network" class="chart"></div>
-    </section>
   </main>
-
-  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
-
   <script src="/js/overview.js"></script>
-  <script>document.getElementById('tm-year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
-
-

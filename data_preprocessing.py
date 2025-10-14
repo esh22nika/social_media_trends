@@ -28,40 +28,25 @@ class DataPreprocessor:
         self.stop_words = set(stopwords.words('english'))
         
     def clean_text(self, text):
-        """Clean and normalize text"""
-        if pd.isna(text) or text == '':
-            return ''
-        
-        # Convert to string
+        if pd.isna(text) or text == '': return ''
         text = str(text)
-        
-        # Remove URLs
         text = re.sub(r'http\S+|www.\S+', '', text)
-        
-        # Remove mentions and hashtags symbols (keep the words)
         text = re.sub(r'[@#]', '', text)
-        
-        # Remove special characters but keep spaces
         text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
-        
-        # Remove extra whitespace
         text = ' '.join(text.split())
-        
         return text.lower()
     
     def extract_hashtags(self, text):
-        """Extract hashtags from text"""
-        if pd.isna(text) or text == '':
-            return []
-        
-        hashtags = re.findall(r'#(\w+)', str(text))
-        return list(set(hashtags))  # Remove duplicates
+        if pd.isna(text) or text == '': return []
+        return list(set(re.findall(r'#(\w+)', str(text))))
     
-    def extract_mentions(self, text):
-        """Extract mentions from text"""
-        if pd.isna(text):
-            return []
-        return re.findall(r'@(\w+)', str(text))
+    def extract_keywords(self, text, max_keywords=10):
+        if pd.isna(text) or text == '': return []
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', str(text).lower())
+        common_words = {'that', 'this', 'with', 'from', 'have', 'will', 'your', 'more', 'about', 'been', 'their', 'what', 'when', 'where', 'which', 'would'}
+        keywords = [w for w in words if w not in self.stop_words and w not in common_words]
+        from collections import Counter
+        return [word for word, _ in Counter(keywords).most_common(max_keywords)]
     
     def calculate_engagement(self, row, platform):
         """Calculate engagement score based on platform"""
@@ -99,77 +84,37 @@ class DataPreprocessor:
 
     
     def analyze_sentiment(self, text):
-        """Analyze sentiment of text"""
-        if pd.isna(text) or text == '':
-            return 'neutral'
-        
+        if pd.isna(text) or text == '': return 'neutral'
         try:
-            blob = TextBlob(str(text))
-            polarity = blob.sentiment.polarity
-            
-            if polarity > 0.1:
-                return 'positive'
-            elif polarity < -0.1:
-                return 'negative'
-            else:
-                return 'neutral'
+            polarity = TextBlob(str(text)).sentiment.polarity
+            if polarity > 0.1: return 'positive'
+            elif polarity < -0.1: return 'negative'
+            else: return 'neutral'
         except:
             return 'neutral'
 
     
     def preprocess_reddit(self, df):
-        """Preprocess Reddit data to unified format"""
-        if df is None or df.empty:
-            return pd.DataFrame()
-        
+        if df is None or df.empty: return pd.DataFrame()
         print("Preprocessing Reddit data...")
-        
-        # Create unified format
         unified = pd.DataFrame()
-        
-        # Map Reddit columns to unified format
         unified['id'] = df['post_id'].astype(str)
         unified['title'] = df['title'].fillna('')
         unified['text'] = df['selftext'].fillna('')
         unified['author'] = df['author'].fillna('unknown')
-        
-        # Fix datetime column - Reddit uses 'created_utc_x'
         unified['created_at'] = pd.to_datetime(df['created_utc_x'], errors='coerce')
-        
-        # Engagement metrics
-        unified['score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
-        unified['num_comments'] = pd.to_numeric(df['num_comments'], errors='coerce').fillna(0)
-        unified['engagement_score'] = unified['score'] + (unified['num_comments'] * 2)
-        
-        # Platform identifier
+        unified['engagement_score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0) + (pd.to_numeric(df['num_comments'], errors='coerce').fillna(0) * 2)
         unified['platform'] = 'reddit'
         unified['url'] = 'https://reddit.com' + df['permalink'].fillna('')
-        
-        # Extract keywords from title and text
-        unified['keywords'] = unified.apply(
-            lambda row: self.extract_keywords(row['title'] + ' ' + row['text']), 
-            axis=1
-        )
-        
-        # Reddit doesn't have hashtags, so extract from text if any
+        unified['keywords'] = unified.apply(lambda row: self.extract_keywords(row['title'] + ' ' + row['text']), axis=1)
         unified['hashtags'] = unified['text'].apply(self.extract_hashtags)
-        
-        # Sentiment analysis
         unified['sentiment'] = unified['text'].apply(self.analyze_sentiment)
-        
-        # Normalize engagement (0-100 scale)
+        unified['like_count'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
+        unified['num_comments'] = pd.to_numeric(df['num_comments'], errors='coerce').fillna(0)
         if unified['engagement_score'].max() > 0:
-            unified['normalized_engagement'] = (
-                (unified['engagement_score'] / unified['engagement_score'].max()) * 100
-            )
+            unified['normalized_engagement'] = (unified['engagement_score'] / unified['engagement_score'].max()) * 100
         else:
             unified['normalized_engagement'] = 0
-        
-        # Trend status based on engagement
-        unified['trend_status'] = unified['normalized_engagement'].apply(
-            lambda x: 'rising' if x > 70 else ('stable' if x > 40 else 'falling')
-        )
-        
         print(f"  Processed {len(unified)} Reddit posts")
         return unified
 

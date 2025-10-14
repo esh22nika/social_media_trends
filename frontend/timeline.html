@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Timeline • TrendMiner</title>
+  <title>Trend Analysis • TrendMiner</title>
   <link rel="stylesheet" href="/css/global.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -17,47 +15,31 @@
       <span>TrendMiner</span>
     </div>
     <nav class="tm-nav">
-      <a href="/overview.html">Overview</a>
-      <a href="/discover.html">Discover</a>
-      <a href="/network.html">Network</a>
-      <a href="/timeline.html">Timeline</a>
-      <a href="/insights.html">Insights</a>
+      <a href="/overview.html">Dashboard</a>
+      <a href="/discover.html">Topic Explorer</a>
+      <a href="/pattern-mining.html">Pattern Mining</a>
+      <a href="/timeline.html" class="active">Trend Analysis</a>
     </nav>
   </header>
-
-  <main style="padding:20px;max-width:1200px;margin:0 auto;">
-    <section class="tm-card">
-      <h3>Topic</h3>
-      <div class="tm-row gap-12">
-        <input id="topic" class="tm-input" placeholder="e.g., AI, climate" />
-        <button class="tm-button" onclick="loadTimeline()">Load</button>
-      </div>
-    </section>
-
-    <div class="tm-grid cols-2 mt-24">
-      <section class="tm-card">
-        <h3>Popularity Over Time</h3>
-        <canvas id="popChart" class="chart-lg"></canvas>
-      </section>
-      <section class="tm-card">
-        <h3>Top Peak Moments</h3>
-        <table>
-          <thead><tr><th>Date</th><th>Mentions</th><th>Engagement</th></tr></thead>
-          <tbody id="peaks"></tbody>
-        </table>
-      </section>
+  
+  <main style="padding:20px;max-width:1400px;margin:0 auto;">
+    <h2>Trend Analysis</h2>
+    <p class="mb-16" style="color:var(--muted)">Track temporal patterns and trend lifecycle evolution</p>
+    
+    <div class="tm-grid cols-4 mb-24">
+        <div class="kpi-card"><h3>Active Trends</h3><span class="value" id="kpi-active">0</span></div>
+        <div class="kpi-card"><h3>Peak This Week</h3><span class="value" id="kpi-peak">0</span></div>
+        <div class="kpi-card"><h3>Emerging Trends</h3><span class="value" id="kpi-emerging">0</span></div>
+        <div class="kpi-card"><h3>Declining</h3><span class="value" id="kpi-declining">0</span></div>
     </div>
-
-    <section class="tm-card mt-24">
-      <h3>Cluster Evolution (Preview)</h3>
-      <div id="clusters" class="tm-row wrap gap-8"></div>
-    </section>
+    
+    <div class="tm-card">
+        <h3>Trend Evolution Over Time</h3>
+        <canvas id="timeline-chart" style="height:350px"></canvas>
+    </div>
   </main>
 
-  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
   <script src="/js/timeline.js"></script>
-  <script>document.getElementById('tm-year').textContent = new Date().getFullYear();</script>
 </body>
 </html>
-
 

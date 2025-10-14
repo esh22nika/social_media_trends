@@ -1,51 +1,78 @@
-let popChart;
+document.addEventListener('DOMContentLoaded', () => {
+    let timelineChart;
 
-async function fetchJSON(url){
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('Request failed');
-  return res.json();
-}
+    const colors = ['#7c3aed', '#22d3ee', '#10b981', '#f59e0b', '#ef4444'];
 
-function renderPopularity(pop){
-  const ctx = document.getElementById('popChart');
-  if(popChart) popChart.destroy();
-  const labels = pop.map(d=>d.date);
-  const counts = pop.map(d=>d.count);
-  const engagement = pop.map(d=>d.engagement);
-  popChart = new Chart(ctx,{type:'line',data:{labels,datasets:[
-    {label:'Mentions',data:counts,borderColor:'#22d3ee',tension:.3,yAxisID:'y'},
-    {label:'Engagement',data:engagement,borderColor:'#7c3aed',tension:.3,yAxisID:'y1'}
-  ]},options:{plugins:{legend:{labels:{color:'#cbd5e1'}}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'},position:'left'},y1:{ticks:{color:'#94a3b8'},position:'right',grid:{drawOnChartArea:false}}}}});
-}
+    async function init() {
+        try {
+            const res = await fetch('/api/trend-analysis');
+            const { success, data } = await res.json();
+            if (!success) throw new Error('Failed to fetch analysis data');
+            
+            // KPIs
+            document.getElementById('kpi-active').textContent = data.kpis.activeTrends;
+            document.getElementById('kpi-peak').textContent = data.kpis.peakThisWeek;
+            document.getElementById('kpi-emerging').textContent = data.kpis.emergingTrends;
+            document.getElementById('kpi-declining').textContent = data.kpis.declining;
 
-function renderPeaks(peaks){
-  const tb = document.getElementById('peaks');
-  tb.innerHTML='';
-  peaks.forEach(p=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.date}</td><td>${p.count||0}</td><td>${Math.round(p.engagement||0)}</td>`;
-    tb.appendChild(tr);
-  })
-}
+            // Chart
+            const ctx = document.getElementById('timeline-chart').getContext('2d');
+            const { labels, datasets } = processTimelineData(data.timeline);
+            
+            if (timelineChart) timelineChart.destroy();
+            timelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#cbd5e1' }}},
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }},
+                        y: { 
+                            ticks: { color: '#94a3b8' },
+                            stacked: true 
+                        }
+                    },
+                    elements: {
+                        line: {
+                            tension: 0.3,
+                            fill: 'start'
+                        }
+                    }
+                }
+            });
 
-function renderClusters(clusters){
-  const root = document.getElementById('clusters');
-  root.innerHTML = '';
-  clusters.forEach(c=>{
-    const el = document.createElement('div');
-    el.className = 'tm-chip';
-    el.textContent = `${c.items.join(' • ')}  (support ${(c.support*100).toFixed(1)}%)`;
-    root.appendChild(el);
-  });
-}
+        } catch (error) {
+            console.error(error);
+            document.getElementById('timeline-chart').innerHTML = `<p style="color:var(--bad)">${error.message}</p>`;
+        }
+    }
 
-async function loadTimeline(){
-  const t = document.getElementById('topic').value.trim();
-  if(!t) return;
-  const {data} = await fetchJSON(`/api/timeline?topic=${encodeURIComponent(t)}`);
-  renderPopularity(data.popularity||[]);
-  renderPeaks(data.peaks||[]);
-  renderClusters(data.clusters||[]);
-}
+    function processTimelineData(timelineData) {
+        if (!timelineData || timelineData.length === 0) return { labels: [], datasets: []};
+        
+        const labels = [...new Set(timelineData.map(d => d.date.split('T')[0]))].sort();
+        const topics = [...new Set(timelineData.flatMap(d => Object.keys(d).filter(k => k !== 'date')))];
+        
+        const datasets = topics.map((topic, i) => {
+            return {
+                label: topic,
+                data: labels.map(label => {
+                    const dayData = timelineData.find(d => d.date.split('T')[0] === label);
+                    return dayData ? dayData[topic] || 0 : 0;
+                }),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length] + '40', // Add alpha for fill
+                fill: true,
+            };
+        });
 
+        return { labels, datasets };
+    }
 
+    init();
+});

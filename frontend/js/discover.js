@@ -1,58 +1,92 @@
-let freqChart, sentChart;
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('search-input');
+    const searchBtn = document.getElementById('search-btn');
+    const feedContainer = document.getElementById('feed-container');
+    const relatedTopicsContainer = document.getElementById('related-topics');
+    const topContributorsContainer = document.getElementById('top-contributors');
 
-async function fetchJSON(url){
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('Request failed');
-  return res.json();
-}
-
-function ensureCharts(timeseries, sentiment){
-  const fctx = document.getElementById('freqChart');
-  const labels = timeseries.map(d=>d.date);
-  const data = timeseries.map(d=>d.count);
-  if(freqChart) freqChart.destroy();
-  freqChart = new Chart(fctx,{type:'line',data:{labels,datasets:[{label:'Mentions',data,borderColor:'#22d3ee',tension:.3}]},options:{plugins:{legend:{labels:{color:'#cbd5e1'}}},scales:{x:{ticks:{color:'#94a3b8'}},y:{ticks:{color:'#94a3b8'}}}}});
-
-  const sctx = document.getElementById('sentChart');
-  if(sentChart) sentChart.destroy();
-  sentChart = new Chart(sctx,{type:'doughnut',data:{labels:['Positive','Neutral','Negative'],datasets:[{data:[sentiment.positive||0,sentiment.neutral||0,sentiment.negative||0],backgroundColor:['#10b981','#64748b','#ef4444']}]},options:{plugins:{legend:{labels:{color:'#cbd5e1'}}}}});
-}
-
-function renderRelated(tags){
-  const root = document.getElementById('related');
-  root.innerHTML='';
-  tags.forEach(t=>{
-    const b = document.createElement('button');
-    b.className='tm-chip';
-    b.textContent = `${t.tag} (${t.count})`;
-    b.onclick = ()=>{
-      document.getElementById('q').value = t.tag;
-      search();
+    const platformColors = {
+        youtube: '#FF0000',
+        reddit: '#FF4500',
+        bluesky: '#1DA1F2',
     };
-    root.appendChild(b);
-  });
-}
 
-function renderSamples(items){
-  const tb = document.getElementById('samples');
-  tb.innerHTML = '';
-  items.forEach(it=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${it.platform}</td><td><a href="${it.url}" target="_blank" rel="noreferrer">${it.title||''}</a></td><td>${Math.round(it.engagement)}</td>`;
-    tb.appendChild(tr);
-  });
-}
+    function createFeedCard(item) {
+        return `
+            <div class="trend-card">
+                <div class="trend-card-header">
+                    <span class="trend-card-platform" style="background:${platformColors[item.platform] || '#6B7280'}; color:white;">
+                        ${item.platform.toUpperCase()}
+                    </span>
+                     <a href="${item.url}" target="_blank" style="font-size:12px; color:var(--muted);">View Original</a>
+                </div>
+                <p style="font-size:14px; color:var(--muted); margin: 0 0 8px 0;">@${item.author}</p>
+                <p class="trend-card-title" style="font-size:15px;">${item.topic}</p>
+                <div class="trend-card-metrics">
+                    <span>❤️ ${item.likes.toLocaleString()}</span>
+                    <span>💬 ${item.comments.toLocaleString()}</span>
+                    <span>🔗 ${item.shares.toLocaleString()}</span>
+                </div>
+            </div>
+        `;
+    }
 
-async function search(){
-  const q = document.getElementById('q').value.trim();
-  if(!q) return;
-  const {data} = await fetchJSON(`/api/trend/metrics?q=${encodeURIComponent(q)}`);
-  ensureCharts(data.timeseries||[], data.sentiment||{});
-  renderRelated(data.relatedTags||[]);
-  renderSamples(data.samples||[]);
-}
+    async function searchTopic(query) {
+        feedContainer.innerHTML = '<p>Loading...</p>';
+        try {
+            const res = await fetch(`/api/explore?q=${encodeURIComponent(query)}`);
+            const { success, data } = await res.json();
 
-// optional: search on Enter
-document.getElementById('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter') search(); });
+            if (!success || !data) throw new Error('Failed to fetch data');
 
+            // Render Feed
+            if (data.feed && data.feed.length > 0) {
+                feedContainer.innerHTML = data.feed.map(createFeedCard).join('');
+            } else {
+                feedContainer.innerHTML = '<p>No results found for this topic.</p>';
+            }
 
+            // Render Related Topics
+            relatedTopicsContainer.innerHTML = '';
+            const topics = data.relatedTopics || {};
+            if (Object.keys(topics).length > 0) {
+                 for (const [topic, count] of Object.entries(topics)) {
+                    relatedTopicsContainer.innerHTML += `<div class="interest-item"><span>${topic}</span> <span>${count} posts</span></div>`;
+                }
+            } else {
+                relatedTopicsContainer.innerHTML = '<p>No related topics.</p>';
+            }
+
+            // Render Top Contributors
+            topContributorsContainer.innerHTML = '';
+             const contributors = data.topContributors || {};
+            if (Object.keys(contributors).length > 0) {
+                 for (const [author, count] of Object.entries(contributors)) {
+                    topContributorsContainer.innerHTML += `<div class="interest-item"><span>@${author}</span> <span>${count} posts</span></div>`;
+                }
+            } else {
+                topContributorsContainer.innerHTML = '<p>No top contributors.</p>';
+            }
+
+        } catch (error) {
+            console.error(error);
+            feedContainer.innerHTML = `<p style="color:var(--bad);">Error: ${error.message}</p>`;
+        }
+    }
+    
+    searchBtn.addEventListener('click', () => {
+        const query = searchInput.value.trim();
+        if (query) {
+            searchTopic(query);
+        }
+    });
+    
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchBtn.click();
+        }
+    });
+
+    // Initial search
+    searchTopic('AI');
+});
