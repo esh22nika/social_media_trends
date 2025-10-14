@@ -278,6 +278,9 @@ class DataPreprocessor:
             return pd.Series([50] * len(series))
         return ((series - series.min()) / (series.max() - series.min()) * 100).fillna(0)
     
+    
+
+        return title
     def create_unified_dataset(self, reddit_df=None, youtube_df=None, bluesky_df=None):
         """Create unified dataset from all platforms"""
         print("Creating unified dataset...")

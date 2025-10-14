@@ -56,7 +56,7 @@
         <div class="tm-card mb-24">
           <h3>Your Interests</h3>
           <div id="interests-list"></div>
-          <button class="tm-button mt-16" style="width:100%">Manage Interests</button>
+          <button id="manage-interests-btn" class="tm-button mt-16" style="width:100%">Manage Interests</button>
         </div>
         <div class="tm-card">
           <h3>Quick Actions</h3>
@@ -68,8 +68,26 @@
         </div>
       </div>
     </div>
-
   </main>
+
+  <!-- Modal for Managing Interests -->
+  <div id="interests-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Manage Your Interests</h3>
+            <button id="close-modal-btn" class="close-button">&times;</button>
+        </div>
+        <div id="modal-body" class="modal-body">
+            <!-- Checkboxes will be populated here by JavaScript -->
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-interests-btn" class="tm-button tm-button-secondary">Cancel</button>
+            <button id="save-interests-btn" class="tm-button">Save Changes</button>
+        </div>
+    </div>
+  </div>
+
   <script src="/js/overview.js"></script>
 </body>
 </html>
+

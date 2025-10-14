@@ -11,12 +11,13 @@ import random
 from data_preprocessing import DataPreprocessor
 from pattern_mining import PatternMiningEngine
 from recommendation_engine import RecommendationEngine
-from gemini_client import GeminiClient # Make sure gemini_client.py is in the same directory
+from gemini_client import GeminiClient
 
 # --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
-TOPIC_CACHE_FILE = 'categorized_topics.csv'
+KEYWORD_CACHE_FILE = 'extracted_keywords.csv' # Using keywords now
+USER_INTERESTS_FILE = 'user_interests.json'
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
 CORS(app)
@@ -26,7 +27,6 @@ preprocessor = DataPreprocessor()
 pattern_miner = PatternMiningEngine(min_support=0.02, min_confidence=0.3)
 recommender = RecommendationEngine()
 
-# Initialize Gemini Client with your hardcoded API key
 try:
     gemini_client = GeminiClient(api_key="AIzaSyAQOdSGnvSLj7GS6LfanX26Z6WjJJ7-Dhg")
 except Exception as e:
@@ -38,16 +38,43 @@ df_unified = None
 association_rules = None
 sequential_patterns = None
 frequent_itemsets = None
+user_interests = ["AI & Machine Learning", "Web Development", "Technology"] # Default
 
 # --- Helper Functions ---
 
+def load_user_interests():
+    """Load user interests from file or use defaults."""
+    global user_interests
+    if os.path.exists(USER_INTERESTS_FILE):
+        try:
+            with open(USER_INTERESTS_FILE, 'r') as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    user_interests = data
+                    print(f"Loaded {len(user_interests)} user interests.")
+                    return
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"Error reading user_interests.json: {e}. Using defaults.")
+    
+    print("No user interests file found. Using default interests.")
+    save_user_interests(user_interests)
+
+
+def save_user_interests(interests):
+    """Save user interests to file."""
+    global user_interests
+    user_interests = interests
+    with open(USER_INTERESTS_FILE, 'w') as f:
+        json.dump(user_interests, f, indent=2)
+    print(f"Saved {len(user_interests)} interests to {USER_INTERESTS_FILE}.")
+
+
 def load_data():
-    """Load, preprocess, categorize with Gemini, and analyze data on startup."""
+    """Load, preprocess, extract keywords with Gemini, and analyze data on startup."""
     global df_unified, association_rules, sequential_patterns, frequent_itemsets
     
     print("Loading data...")
     
-    # Load raw data from CSVs
     try:
         reddit_df = pd.read_csv('reddit_trending_data.csv') if os.path.exists('reddit_trending_data.csv') else None
         youtube_df = pd.read_csv('youtube_trending_data.csv') if os.path.exists('youtube_trending_data.csv') else None
@@ -56,52 +83,55 @@ def load_data():
         print(f"Error loading raw data: {e}")
         return False
 
-    # Create unified dataset using the preprocessor
     df_unified = preprocessor.create_unified_dataset(reddit_df, youtube_df, bluesky_df)
     
     if df_unified is None or df_unified.empty:
         print("FATAL: No data loaded, cannot proceed.")
         return False
     
-    # --- DYNAMIC TOPIC CATEGORIZATION WITH GEMINI & CACHING ---
-    if gemini_client:
-        # **FIX:** Ensure the main dataframe's ID is a string before any merging.
-        df_unified['id'] = df_unified['id'].astype(str)
+    df_unified['id'] = df_unified['id'].astype(str)
 
-        if os.path.exists(TOPIC_CACHE_FILE):
-            print(f"Loading cached topic categories from {TOPIC_CACHE_FILE}...")
-            topic_df = pd.read_csv(TOPIC_CACHE_FILE)
-            # **FIX:** Ensure the cached dataframe's ID is also a string.
-            topic_df['id'] = topic_df['id'].astype(str)
-            
-            df_unified = pd.merge(df_unified, topic_df, on='id', how='left')
-            df_unified['topic_category'].fillna('General Discussion', inplace=True)
+    # --- DYNAMIC KEYWORD EXTRACTION WITH GEMINI & CACHING ---
+    if gemini_client:
+        if os.path.exists(KEYWORD_CACHE_FILE):
+            print(f"Loading cached keywords from {KEYWORD_CACHE_FILE}...")
+            keyword_df = pd.read_csv(KEYWORD_CACHE_FILE)
+            keyword_df['id'] = keyword_df['id'].astype(str)
+            df_unified = pd.merge(df_unified, keyword_df, on='id', how='left')
         else:
-            print("No topic cache found. Categorizing with Gemini API...")
-            df_unified['topic_category'] = gemini_client.bulk_categorize_topics(df_unified, text_column='title')
-            df_unified[['id', 'topic_category']].to_csv(TOPIC_CACHE_FILE, index=False)
-            print(f"Saved categorized topics to {TOPIC_CACHE_FILE} for future fast startups.")
+            print("No keyword cache found. Extracting with Gemini API...")
+            df_unified['gemini_keywords'] = gemini_client.bulk_extract_keywords(df_unified, text_column='title')
+            df_unified[['id', 'gemini_keywords']].to_csv(KEYWORD_CACHE_FILE, index=False)
+            print(f"Saved extracted keywords to {KEYWORD_CACHE_FILE}.")
     else:
-        print("WARNING: Gemini client not initialized. Using 'General' for all topics.")
-        df_unified['topic_category'] = 'General'
-        
-    # Safely parse list-like columns
-    for col in ['keywords', 'hashtags']:
+        print("WARNING: Gemini client not initialized. Keywords will be based on basic extraction.")
+        df_unified['gemini_keywords'] = [[] for _ in range(len(df_unified))]
+
+    # Safely parse list-like columns from CSV
+    list_columns = ['keywords', 'hashtags', 'gemini_keywords']
+    for col in list_columns:
         if col in df_unified.columns:
             df_unified[col] = df_unified[col].apply(
                 lambda x: eval(x) if isinstance(x, str) and x.startswith('[') else x if isinstance(x, list) else []
             )
 
-    # Build recommendation features
+    # Combine keywords from preprocessing and Gemini for a richer dataset for pattern mining
+    df_unified['keywords'] = df_unified.apply(
+        lambda row: list(set(row.get('keywords', []) + row.get('gemini_keywords', []))), axis=1
+    )
+
+    # Use the first keyword as the 'topic_category' for display purposes
+    df_unified['topic_category'] = df_unified['keywords'].apply(lambda x: x[0] if x else 'General')
+    
     recommender.build_item_features(df_unified)
     
-    # Mine patterns
-    print("Mining patterns...")
+    print("Mining patterns with dynamically extracted keywords...")
     transactions = pattern_miner.prepare_transactions(df_unified)
     frequent_itemsets = pattern_miner.apriori_algorithm(transactions, max_k=3)
     association_rules = pattern_miner.generate_association_rules(frequent_itemsets)
     sequential_patterns = pattern_miner.mine_sequential_patterns(df_unified)
     
+    load_user_interests() # Load user interests after data is ready
     print("Data loading and processing complete!")
     return True
 
@@ -110,20 +140,25 @@ def format_trend_for_frontend(row):
     platform = row.get('platform', 'unknown')
     engagement = row.get('normalized_engagement', 50)
     
+    trend = 'stable'
     if engagement > 70: trend = 'rising'
-    elif engagement > 40: trend = 'stable'
-    else: trend = 'falling'
+    elif engagement < 40: trend = 'falling'
     
     created_at_val = row.get('created_at')
     created_at_iso = pd.to_datetime(created_at_val).isoformat() if not pd.isna(created_at_val) else datetime.now().isoformat()
+    original_title = str(row.get('title', ''))
 
+    # Consolidate different field names for comments and shares/reposts
+    comments = row.get('num_comments', 0) or row.get('comment_count', 0) or row.get('reply_count', 0)
+    shares = row.get('repost_count', 0) or row.get('score', 0) # Reddit score is a good proxy for shares/visibility
+    
     return {
         'id': row.get('id'),
-        'topic': str(row.get('title', ''))[:100],
+        'topic': original_title[:100],
         'platform': platform,
         'likes': int(row.get('like_count', 0)),
-        'comments': int(row.get('num_comments', 0)),
-        'shares': int(row.get('repost_count', 0)),
+        'comments': int(comments),
+        'shares': int(shares),
         'sentiment': row.get('sentiment', 'neutral'),
         'trend': trend,
         'relevanceScore': int(engagement),
@@ -160,34 +195,64 @@ def health_check():
 # ===                  NEW CONSOLIDATED ENDPOINTS FOR UI                     ===
 # ==============================================================================
 
+@app.route('/api/interests', methods=['GET', 'POST'])
+def manage_interests():
+    """Endpoint to get and update user interests."""
+    if request.method == 'POST':
+        try:
+            new_interests = request.json.get('interests', [])
+            if isinstance(new_interests, list):
+                save_user_interests(new_interests)
+                return jsonify({'success': True, 'message': 'Interests updated successfully.'})
+            return jsonify({'success': False, 'error': 'Invalid data format'}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # GET request
+    try:
+        # Get all unique primary keywords to use as selectable topics
+        all_topics = df_unified['topic_category'].dropna().unique().tolist()
+        return jsonify({
+            'success': True,
+            'data': {
+                'currentUserInterests': user_interests,
+                'availableTopics': sorted([topic for topic in all_topics if topic != 'General'])
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/dashboard', methods=['GET'])
 def get_dashboard_data():
     """Consolidated endpoint for the main dashboard."""
     try:
-        interests_param = request.args.get('interests', 'AI & Machine Learning,Web Development,Technology')
-        interests = interests_param.split(',')
+        interests = user_interests
         
         df_unified['created_at_dt'] = pd.to_datetime(df_unified['created_at'])
-        
-        kpis = {
-            'trendsTracked': len(df_unified),
-            'activeTopics': df_unified['topic_category'].nunique(),
-            'updatesToday': len(df_unified[df_unified['created_at_dt'].dt.date == datetime.now().date()]),
-            'relevanceScore': 92
-        }
         
         user_profile = recommender.create_user_profile(user_interests=interests)
         recommendations = recommender.hybrid_recommendation(df_unified, user_profile, top_n=10)
         recommended_trends = [format_trend_for_frontend(row) for _, row in recommendations.iterrows()]
 
+        avg_relevance = int(np.mean([item['relevanceScore'] for item in recommended_trends])) if recommended_trends else 75
+
+        kpis = {
+            'trendsTracked': len(df_unified),
+            'activeTopics': df_unified['topic_category'].nunique(),
+            'updatesToday': len(df_unified[df_unified['created_at_dt'].dt.date == datetime.now().date()]),
+            'relevanceScore': avg_relevance
+        }
+        
         trending_now = df_unified.nlargest(10, 'engagement_score')
         trending_trends = [format_trend_for_frontend(row) for _, row in trending_now.iterrows()]
 
+        # Now matches against the dynamically generated topic_category
         interest_counts = df_unified[df_unified['topic_category'].isin(interests)]['topic_category'].value_counts().to_dict()
 
         return jsonify({'success': True, 'data': {
             'kpis': kpis, 'recommendations': recommended_trends,
-            'trending': trending_trends, 'userInterests': interest_counts
+            'trending': trending_trends, 'userInterests': interest_counts,
+            'currentInterests': interests
         }})
     except Exception as e:
         print(f"Error in /api/dashboard: {e}")

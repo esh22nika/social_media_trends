@@ -5,10 +5,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const relatedTopicsContainer = document.getElementById('related-topics');
     const topContributorsContainer = document.getElementById('top-contributors');
 
+    // Updated platform colors
     const platformColors = {
-        youtube: '#FF0000',
-        reddit: '#FF4500',
-        bluesky: '#1DA1F2',
+        youtube: '#FF0000',  // Red
+        reddit: '#FFB000',   // Yellow/Orange
+        bluesky: '#1DA1F2',  // Blue
     };
 
     function createFeedCard(item) {
