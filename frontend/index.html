@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrendMiner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/global.css" />
+</head>
+<body>
+  <header class="tm-header">
+    <div class="tm-brand" onclick="window.location.href='/'">
+      <img src="/icons/trend.svg" alt="TrendMiner" class="tm-logo"/>
+      <span>TrendMiner</span>
+    </div>
+    <nav class="tm-nav">
+      <a href="/overview.html">Overview</a>
+      <a href="/discover.html">Discover</a>
+      <a href="/network.html">Network</a>
+      <a href="/timeline.html">Timeline</a>
+      <a href="/insights.html">Insights</a>
+    </nav>
+  </header>
+
+  <main class="tm-landing">
+    <div class="tm-hero">
+      <h1>TrendMiner</h1>
+      <p>Analyze social trends and emerging patterns across platforms.</p>
+      <button class="tm-button" onclick="window.location.href='/overview.html'">Get Started</button>
+    </div>
+  </main>
+
+  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
+
+  <script>
+    document.getElementById('tm-year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
+
+

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Network • TrendMiner</title>
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="tm-header">
+    <div class="tm-brand" onclick="window.location.href='/'">
+      <img src="/icons/trend.svg" alt="TrendMiner" class="tm-logo"/>
+      <span>TrendMiner</span>
+    </div>
+    <nav class="tm-nav">
+      <a href="/overview.html">Overview</a>
+      <a href="/discover.html">Discover</a>
+      <a href="/network.html">Network</a>
+      <a href="/timeline.html">Timeline</a>
+      <a href="/insights.html">Insights</a>
+    </nav>
+  </header>
+
+  <main style="padding:20px;max-width:1200px;margin:0 auto;">
+    <section class="tm-card">
+      <h3>Filters</h3>
+      <div class="tm-row gap-12 wrap">
+        <select id="platform" class="tm-input" style="max-width:200px">
+          <option value="all">All Platforms</option>
+          <option value="reddit">Reddit</option>
+          <option value="youtube">YouTube</option>
+          <option value="bluesky">Bluesky</option>
+        </select>
+        <input id="start" class="tm-input" type="date"/>
+        <input id="end" class="tm-input" type="date"/>
+        <button class="tm-button" onclick="loadGraph()">Apply</button>
+      </div>
+    </section>
+
+    <section class="tm-card mt-24">
+      <h3>Pattern Network</h3>
+      <div id="graph" class="chart-lg"></div>
+    </section>
+  </main>
+
+  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
+  <script src="/js/network.js"></script>
+  <script>document.getElementById('tm-year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
+
+

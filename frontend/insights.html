@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Insights • TrendMiner</title>
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="tm-header">
+    <div class="tm-brand" onclick="window.location.href='/'">
+      <img src="/icons/trend.svg" alt="TrendMiner" class="tm-logo"/>
+      <span>TrendMiner</span>
+    </div>
+    <nav class="tm-nav">
+      <a href="/overview.html">Overview</a>
+      <a href="/discover.html">Discover</a>
+      <a href="/network.html">Network</a>
+      <a href="/timeline.html">Timeline</a>
+      <a href="/insights.html">Insights</a>
+    </nav>
+  </header>
+
+  <main style="padding:20px;max-width:1200px;margin:0 auto;">
+    <div class="tm-grid cols-2">
+      <section class="tm-card">
+        <h3>Top 10 Hashtags/Keywords</h3>
+        <table>
+          <thead><tr><th>Term</th><th>Mentions</th></tr></thead>
+          <tbody id="top"></tbody>
+        </table>
+      </section>
+      <section class="tm-card">
+        <h3>Pattern Density</h3>
+        <div class="tm-kpi"><span class="k" id="density">0.0</span><span class="s">avg co-occurrence</span></div>
+      </section>
+    </div>
+
+    <div class="tm-grid cols-2 mt-24">
+      <section class="tm-card">
+        <h3>Engagement Heatmap (per-platform weekly)</h3>
+        <canvas id="heat" class="chart-lg"></canvas>
+      </section>
+      <section class="tm-card">
+        <h3>Co-occurrence Matrix</h3>
+        <canvas id="matrix" class="chart-lg"></canvas>
+      </section>
+    </div>
+  </main>
+
+  <footer class="tm-footer">© <span id="tm-year"></span> TrendMiner</footer>
+  <script src="/js/insights.js"></script>
+  <script>document.getElementById('tm-year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
+
+
