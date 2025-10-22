@@ -1,0 +1,5 @@
+# Ignore all CSV files
+*.csv
+
+# Ignore the virtual environment folder
+project_env_312/

@@ -16,7 +16,8 @@ from gemini_client import GeminiClient
 # --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
-KEYWORD_CACHE_FILE = 'extracted_keywords.csv' # Using keywords now
+KEYWORD_CACHE_FILE = 'extracted_keywords.csv'
+TITLE_CACHE_FILE = 'summarized_titles.csv'  # NEW: Cache for summarized titles
 USER_INTERESTS_FILE = 'user_interests.json'
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
@@ -70,7 +71,7 @@ def save_user_interests(interests):
 
 
 def load_data():
-    """Load, preprocess, extract keywords with Gemini, and analyze data on startup."""
+    """Load, preprocess, extract keywords AND summarize titles with Gemini, and analyze data on startup."""
     global df_unified, association_rules, sequential_patterns, frequent_itemsets
     
     print("Loading data...")
@@ -103,9 +104,22 @@ def load_data():
             df_unified['gemini_keywords'] = gemini_client.bulk_extract_keywords(df_unified, text_column='title')
             df_unified[['id', 'gemini_keywords']].to_csv(KEYWORD_CACHE_FILE, index=False)
             print(f"Saved extracted keywords to {KEYWORD_CACHE_FILE}.")
+        
+        # --- NEW: TITLE SUMMARIZATION WITH CACHING ---
+        if os.path.exists(TITLE_CACHE_FILE):
+            print(f"Loading cached summarized titles from {TITLE_CACHE_FILE}...")
+            title_df = pd.read_csv(TITLE_CACHE_FILE)
+            title_df['id'] = title_df['id'].astype(str)
+            df_unified = pd.merge(df_unified, title_df[['id', 'clean_title']], on='id', how='left')
+        else:
+            print("No title cache found. Summarizing titles with Gemini API...")
+            df_unified['clean_title'] = gemini_client.bulk_summarize_titles(df_unified, text_column='title')
+            df_unified[['id', 'clean_title']].to_csv(TITLE_CACHE_FILE, index=False)
+            print(f"Saved summarized titles to {TITLE_CACHE_FILE}.")
     else:
-        print("WARNING: Gemini client not initialized. Keywords will be based on basic extraction.")
+        print("WARNING: Gemini client not initialized. Using original titles.")
         df_unified['gemini_keywords'] = [[] for _ in range(len(df_unified))]
+        df_unified['clean_title'] = df_unified['title']
 
     # Safely parse list-like columns from CSV
     list_columns = ['keywords', 'hashtags', 'gemini_keywords']
@@ -146,19 +160,43 @@ def format_trend_for_frontend(row):
     
     created_at_val = row.get('created_at')
     created_at_iso = pd.to_datetime(created_at_val).isoformat() if not pd.isna(created_at_val) else datetime.now().isoformat()
-    original_title = str(row.get('title', ''))
+    
+    # Use the cleaned title if available, otherwise use original
+    clean_title = row.get('clean_title', '')
+    original_title = row.get('title', '')
+    
+    # Handle NaN values properly
+    if pd.isna(clean_title) or str(clean_title).lower() == 'nan' or clean_title == '':
+        display_title = str(original_title) if not pd.isna(original_title) else 'Untitled Post'
+    else:
+        display_title = str(clean_title)
 
-    # Consolidate different field names for comments and shares/reposts
-    comments = row.get('num_comments', 0) or row.get('comment_count', 0) or row.get('reply_count', 0)
-    shares = row.get('repost_count', 0) or row.get('score', 0) # Reddit score is a good proxy for shares/visibility
+    # FIXED: Properly consolidate metrics across platforms with better fallbacks
+    likes = int(row.get('like_count', 0) or row.get('score', 0) or 0)
+    
+    # Comments - different field names per platform, try all variations
+    comments = int(
+        row.get('comment_count', 0) or 
+        row.get('num_comments', 0) or 
+        row.get('reply_count', 0) or 
+        row.get('actual_comment_count', 0) or 0
+    )
+    
+    # Shares/Score - Reddit uses score, others use repost_count
+    if platform == 'reddit':
+        shares = int(row.get('score', 0) or row.get('like_count', 0) or 0)
+    elif platform == 'youtube':
+        shares = int(row.get('view_count', 0) or 0) // 100  # Views as proxy
+    else:
+        shares = int(row.get('repost_count', 0) or row.get('quote_count', 0) or 0)
     
     return {
         'id': row.get('id'),
-        'topic': original_title[:100],
+        'topic': str(display_title)[:100],  # Use summarized title
         'platform': platform,
-        'likes': int(row.get('like_count', 0)),
-        'comments': int(comments),
-        'shares': int(shares),
+        'likes': likes,
+        'comments': comments,
+        'shares': shares,
         'sentiment': row.get('sentiment', 'neutral'),
         'trend': trend,
         'relevanceScore': int(engagement),
@@ -208,15 +246,17 @@ def manage_interests():
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    # GET request
+    # GET request - FIXED: Limit topics to prevent browser freeze
     try:
-        # Get all unique primary keywords to use as selectable topics
-        all_topics = df_unified['topic_category'].dropna().unique().tolist()
+        # Get unique topics and limit to top 50 by frequency
+        topic_counts = df_unified['topic_category'].value_counts()
+        top_topics = topic_counts[topic_counts.index != 'General'].head(50).index.tolist()
+        
         return jsonify({
             'success': True,
             'data': {
                 'currentUserInterests': user_interests,
-                'availableTopics': sorted([topic for topic in all_topics if topic != 'General'])
+                'availableTopics': sorted(top_topics)
             }
         })
     except Exception as e:
@@ -306,15 +346,28 @@ def get_trend_analysis():
 def get_pattern_mining_data():
     """Consolidated endpoint for the Pattern Mining page."""
     try:
+        # Filter association rules to remove support/confidence, keep only lift and platforms
+        filtered_rules = []
+        for rule in association_rules:
+            filtered_rule = {
+                'antecedent': rule['antecedent'],
+                'consequent': rule['consequent'],
+                'lift': rule['lift']
+            }
+            # Add platforms if available
+            if 'platforms' in rule:
+                filtered_rule['platforms'] = rule['platforms']
+            filtered_rules.append(filtered_rule)
+        
         return jsonify({
             'success': True,
             'data': {
                 'kpis': {
-                    'rules': len(association_rules),
+                    'rules': len(filtered_rules),
                     'itemsets': len([iset for iset in frequent_itemsets if len(iset) > 1]),
                     'patterns': len(sequential_patterns)
                 },
-                'association_rules': sorted(association_rules, key=lambda x: x['lift'], reverse=True)[:50],
+                'association_rules': sorted(filtered_rules, key=lambda x: x['lift'], reverse=True)[:50],
                 'frequent_itemsets': sorted([{'items': list(k), 'support': v} for k, v in frequent_itemsets.items() if len(k) > 1], key=lambda x: x['support'], reverse=True)[:50],
                 'sequential_patterns': sequential_patterns[:50]
             }
@@ -491,8 +544,6 @@ def insights_report():
                     for t in terms:
                         if t: term_counts[t] = term_counts.get(t, 0) + 1
         top_terms = sorted(term_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        
-        # ... (rest of your original insights logic can be added back here if needed) ...
         
         return jsonify({'success': True, 'data': {
             'topTerms': [{'term': k, 'count': v} for k, v in top_terms],
